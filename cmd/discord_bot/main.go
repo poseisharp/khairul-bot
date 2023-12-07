@@ -9,17 +9,21 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/life4/genesis/maps"
 	"github.com/life4/genesis/slices"
-	ping_feature "github.com/poseisharp/khairul-bot/internal/app/features/ping"
-	"github.com/poseisharp/khairul-bot/internal/interfaces/features"
+	"github.com/poseisharp/khairul-bot/internal/app/features"
+	feature_jadwal "github.com/poseisharp/khairul-bot/internal/app/features/jadwal"
+	"github.com/poseisharp/khairul-bot/internal/app/services"
+	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	interface_features "github.com/poseisharp/khairul-bot/internal/interfaces"
+	memory_repositories "github.com/poseisharp/khairul-bot/internal/persistent/repositories/memory"
 )
 
 var (
 	s        *discordgo.Session
 	GuildID  string = ""
-	commands        = map[string]features.FeatureCommand{}
+	commands        = map[string]interface_features.FeatureCommand{}
 )
 
-func addCommand(command features.FeatureCommand) {
+func addCommand(command interface_features.FeatureCommand) {
 	commands[command.DiscordCommand().Name] = command
 }
 
@@ -33,27 +37,54 @@ func init() {
 		log.Fatal("Error creating discord session")
 	}
 
-	addCommand(ping_feature.New())
+	serverRepository := memory_repositories.NewServerRepository()
+	serverService := services.NewServerService(serverRepository)
+
+	prayerService := services.NewPrayerService()
+
+	addCommand(features.NewPingCommand())
+	addCommand(feature_jadwal.NewJadwalPresetCommand(serverService))
+	addCommand(feature_jadwal.NewJadwalCommand(prayerService, serverService))
+	addCommand(feature_jadwal.NewJadwalManualCommand(prayerService))
 
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commands[i.ApplicationCommandData().Name]; ok {
-			if err := h.Handle(s, i); err != nil {
-				log.Fatalf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
+		switch i.Type {
+		case discordgo.InteractionApplicationCommand:
+			if h, ok := commands[i.ApplicationCommandData().Name]; ok {
+				if err := h.HandleCommand(s, i); err != nil {
+					log.Panicf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
+				}
 			}
 		}
+
+		for _, command := range commands {
+			if err := command.Handle(s, i); err != nil {
+				log.Panicf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
+			}
+		}
+	})
+
+	s.AddHandler(func(s *discordgo.Session, g *discordgo.GuildCreate) {
+		serverService.CreateServer(entities.Server{
+			ID:            g.ID,
+			JadwalPresets: []entities.JadwalPreset{},
+		})
+	})
+
+	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
 	})
 }
 
 func main() {
-	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
-	})
-
 	if err := s.Open(); err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
 	}
+
 	log.Println("Adding commands...")
-	registeredCommands, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, GuildID, slices.MapAsync(maps.Values(commands), 0, func(v features.FeatureCommand) *discordgo.ApplicationCommand { return v.DiscordCommand() }))
+	registeredCommands, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, GuildID, slices.MapAsync(maps.Values(commands), 0, func(v interface_features.FeatureCommand) *discordgo.ApplicationCommand {
+		return v.DiscordCommand()
+	}))
 
 	if err != nil {
 		log.Fatalf("Cannot add commands: %v", err)
@@ -75,3 +106,14 @@ func main() {
 
 	log.Println("Gracefully shutting down.")
 }
+
+// func initDb() (db *gorm.DB, err error) {
+// 	db, err = gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+// 	if err != nil {
+// 		return
+// 	}
+
+// 	db.AutoMigrate(&entities.Server{})
+
+// 	return
+// }

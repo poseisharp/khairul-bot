@@ -1,6 +1,7 @@
 package entities
 
 type Server struct {
-	ID       string
-	Timezone string
+	ID string
+
+	JadwalPresets []JadwalPreset
 }

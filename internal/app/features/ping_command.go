@@ -1,21 +1,19 @@
-package ping_feature
+package features
 
 import (
 	"log"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/poseisharp/khairul-bot/internal/interfaces/features"
+	"github.com/poseisharp/khairul-bot/internal/interfaces"
 )
 
 type PingCommand struct {
-	features.FeatureCommand
+	interfaces.FeatureCommand
 
 	discordCommand *discordgo.ApplicationCommand
 }
 
-var _ features.FeatureCommand = &PingCommand{}
-
-func New() *PingCommand {
+func NewPingCommand() *PingCommand {
 	return &PingCommand{
 		discordCommand: &discordgo.ApplicationCommand{
 			Name:        "ping",
@@ -28,7 +26,7 @@ func (p *PingCommand) DiscordCommand() *discordgo.ApplicationCommand {
 	return p.discordCommand
 }
 
-func (*PingCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+func (*PingCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	log.Println("Handling ping command...")
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -36,4 +34,8 @@ func (*PingCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate)
 			Content: "Pong!",
 		},
 	})
+}
+
+func (*PingCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	return nil
 }
