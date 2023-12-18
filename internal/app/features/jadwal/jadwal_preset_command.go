@@ -1,11 +1,13 @@
 package feature_jadwal
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/poseisharp/khairul-bot/internal/app/services"
 	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/value_objects"
 	"github.com/poseisharp/khairul-bot/internal/interfaces"
 )
 
@@ -15,9 +17,10 @@ type JadwalPresetCommand struct {
 	discordCommand *discordgo.ApplicationCommand
 
 	serverService *services.ServerService
+	presetService *services.PresetService
 }
 
-func NewJadwalPresetCommand(serverService *services.ServerService) *JadwalPresetCommand {
+func NewJadwalPresetCommand(serverService *services.ServerService, presetService *services.PresetService) *JadwalPresetCommand {
 	return &JadwalPresetCommand{
 		discordCommand: &discordgo.ApplicationCommand{
 			Name:        "jadwal-preset",
@@ -25,27 +28,33 @@ func NewJadwalPresetCommand(serverService *services.ServerService) *JadwalPreset
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "mode",
-					Description: "Mode",
+					Name:        "add",
+					Description: "Add jadwal preset",
 					Required:    true,
-					Choices: []*discordgo.ApplicationCommandOptionChoice{
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "remove",
+					Description: "Remove jadwal preset",
+					Options: []*discordgo.ApplicationCommandOption{
 						{
-							Name:  "add",
-							Value: "add",
-						},
-						{
-							Name:  "remove",
-							Value: "remove",
-						},
-						{
-							Name:  "list",
-							Value: "list",
+							Type:         discordgo.ApplicationCommandOptionString,
+							Name:         "preset",
+							Description:  "Preset jadwal yang akan dihapus",
+							Required:     true,
+							Autocomplete: true,
 						},
 					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "list",
+					Description: "List jadwal preset",
 				},
 			},
 		},
 		serverService: serverService,
+		presetService: presetService,
 	}
 }
 
@@ -53,13 +62,27 @@ func (p *JadwalPresetCommand) DiscordCommand() *discordgo.ApplicationCommand {
 	return p.discordCommand
 }
 
-func (p *JadwalPresetCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	options := i.ApplicationCommandData().Options
+func (p *JadwalPresetCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	switch i.Type {
+	case discordgo.InteractionApplicationCommand:
+		if i.ApplicationCommandData().Name == p.discordCommand.Name {
+			return p.HandleCommand(s, i)
+		}
+	case discordgo.InteractionModalSubmit:
+		data := i.ModalSubmitData()
 
-	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
-	for _, opt := range options {
-		optionMap[opt.Name] = opt
+		if strings.HasPrefix(data.CustomID, "jadwal-preset-add") {
+			return p.handleModalAdd(s, i, data)
+		}
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		return p.handleAutocomplete(s, i)
 	}
+
+	return nil
+}
+
+func (p *JadwalPresetCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	optionMap := value_objects.ArrApplicationCommandInteractionDataOption(i.ApplicationCommandData().Options).ToMap()
 
 	mode := optionMap["mode"].StringValue()
 
@@ -113,41 +136,37 @@ func (p *JadwalPresetCommand) HandleCommand(s *discordgo.Session, i *discordgo.I
 			return err
 		}
 
-		presets := make([]discordgo.SelectMenuOption, len(server.JadwalPresets))
-		for i, preset := range server.JadwalPresets {
-			presets[i] = discordgo.SelectMenuOption{
-				Label: preset.Name,
-				Value: preset.Name,
-			}
+		presetId, err := strconv.Atoi(optionMap["preset"].StringValue())
+
+		preset, err := p.presetService.GetPreset(presetId)
+		if err != nil {
+			return err
 		}
 
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseModal,
-			Data: &discordgo.InteractionResponseData{
-				CustomID: "jadwal-preset-remove",
-				Title:    "Remove Jadwal Preset",
-				Components: []discordgo.MessageComponent{
-					discordgo.ActionsRow{
-						Components: []discordgo.MessageComponent{
-							discordgo.SelectMenu{
-								CustomID: "jadwal-preset-remove-select",
-								Options:  presets,
-								MenuType: discordgo.StringSelectMenu,
-							},
-						},
-					},
+		if preset.ServerID != server.ID {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Preset tidak ditemukan",
+					Flags:   discordgo.MessageFlagsEphemeral,
 				},
-			},
-		})
+			})
+		}
+
 	} else if mode == "list" {
 		server, err := p.serverService.GetServer(i.GuildID)
 		if err != nil {
 			return err
 		}
 
-		presets := make([]*discordgo.MessageEmbed, len(server.JadwalPresets))
-		for i, preset := range server.JadwalPresets {
-			presets[i] = &discordgo.MessageEmbed{
+		presets, err := p.presetService.GetPresetsByServerID(server.ID)
+		if err != nil {
+			return err
+		}
+
+		choices := make([]*discordgo.MessageEmbed, len(presets))
+		for i, preset := range presets {
+			choices[i] = &discordgo.MessageEmbed{
 				Title: preset.Name,
 				Fields: []*discordgo.MessageEmbedField{
 					{
@@ -168,24 +187,9 @@ func (p *JadwalPresetCommand) HandleCommand(s *discordgo.Session, i *discordgo.I
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "List Jadwal Preset",
-				Embeds:  presets,
+				Embeds:  choices,
 			},
 		})
-	}
-
-	return nil
-}
-
-func (p *JadwalPresetCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	if i.Type == discordgo.InteractionModalSubmit {
-		data := i.ModalSubmitData()
-
-		if strings.HasPrefix(data.CustomID, "jadwal-preset-add") {
-			p.handleModalAdd(s, i, data)
-		} else if strings.HasPrefix(data.CustomID, "jadwal-preset-remove") {
-			p.handleModalRemove(s, i, data)
-		}
-
 	}
 
 	return nil
@@ -207,21 +211,15 @@ func (p *JadwalPresetCommand) handleModalAdd(s *discordgo.Session, i *discordgo.
 	timezone := data.Components[1].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 	latLong := data.Components[2].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 
-	preset := entities.JadwalPreset{
+	preset := entities.Preset{
+		ServerID: i.GuildID,
 		Name:     name,
-		TimeZone: entities.TimeZone(timezone),
-		LatLong:  entities.LatLong(strings.Split(latLong, ",")),
+		TimeZone: value_objects.TimeZone(timezone),
+		LatLong:  value_objects.LatLong(strings.Split(latLong, ",")),
 	}
 
-	server, err := p.serverService.GetServer(i.GuildID)
-
+	err = p.presetService.CreatePreset(preset)
 	if err != nil {
-		return err
-	}
-
-	server.JadwalPresets = append(server.JadwalPresets, preset)
-
-	if err := p.serverService.UpdateServer(*server); err != nil {
 		return err
 	}
 
@@ -232,28 +230,34 @@ func (p *JadwalPresetCommand) handleModalAdd(s *discordgo.Session, i *discordgo.
 	return nil
 }
 
-func (p *JadwalPresetCommand) handleModalRemove(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ModalSubmitInteractionData) error {
-	preset, err := data.Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.SelectMenu).MarshalJSON()
+func (p *JadwalPresetCommand) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	data := i.ApplicationCommandData()
 
-	// server, err := p.serverService.GetServer(i.GuildID)
+	if data.Name == "preset" {
+		server, err := p.serverService.GetServer(i.GuildID)
+		if err != nil {
+			return err
+		}
 
-	if err != nil {
-		return err
-	}
+		presets, err := p.presetService.GetPresetsByServerID(server.ID)
+		if err != nil {
+			return err
+		}
 
-	// for i, preset := range server.JadwalPresets {
-	// 	if preset.Name == selectMenu.Value {
-	// 		server.JadwalPresets = append(server.JadwalPresets[:i], server.JadwalPresets[i+1:]...)
-	// 		break
-	// 	}
-	// }
+		choices := make([]*discordgo.ApplicationCommandOptionChoice, len(presets))
+		for i, preset := range presets {
+			choices[i] = &discordgo.ApplicationCommandOptionChoice{
+				Name:  preset.Name,
+				Value: strconv.Itoa(preset.ID),
+			}
+		}
 
-	// if err := p.serverService.UpdateServer(*server); err != nil {
-	// 	return err
-	// }
-
-	if _, err := s.ChannelMessageSend(i.ChannelID, string(preset)); err != nil {
-		return err
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+			Data: &discordgo.InteractionResponseData{
+				Choices: choices,
+			},
+		})
 	}
 
 	return nil

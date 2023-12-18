@@ -8,7 +8,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/poseisharp/khairul-bot/internal/app/services"
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/value_objects"
 	"github.com/poseisharp/khairul-bot/internal/interfaces"
 )
 
@@ -48,20 +48,25 @@ func (p *JadwalManualCommand) DiscordCommand() *discordgo.ApplicationCommand {
 	return p.discordCommand
 }
 
+func (p *JadwalManualCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	if i.Type == discordgo.InteractionApplicationCommand {
+		if i.ApplicationCommandData().Name == p.discordCommand.Name {
+			return p.HandleCommand(s, i)
+		}
+	}
+
+	return nil
+}
+
 func (p *JadwalManualCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	log.Println("Handling jadwal command...")
 
-	options := i.ApplicationCommandData().Options
+	optionMap := value_objects.ArrApplicationCommandInteractionDataOption(i.ApplicationCommandData().Options).ToMap()
 
-	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
-	for _, opt := range options {
-		optionMap[opt.Name] = opt
-	}
-
-	latLong := entities.LatLong(strings.Split(optionMap["lat_long"].StringValue(), ","))
+	latLong := value_objects.LatLong(strings.Split(optionMap["lat_long"].StringValue(), ","))
 	timezone := optionMap["timezone"].StringValue()
 
-	schedule := p.prayerService.Calculate(entities.TimeZone(timezone), latLong)
+	schedule := p.prayerService.Calculate(value_objects.TimeZone(timezone), latLong)
 	index := time.Now().Day() - 1
 
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -112,8 +117,4 @@ func (p *JadwalManualCommand) HandleCommand(s *discordgo.Session, i *discordgo.I
 			},
 		},
 	})
-}
-
-func (p *JadwalManualCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	return nil
 }

@@ -7,25 +7,23 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
-	"github.com/life4/genesis/maps"
 	"github.com/life4/genesis/slices"
 	"github.com/poseisharp/khairul-bot/internal/app/features"
+	feature_adzan "github.com/poseisharp/khairul-bot/internal/app/features/adzan"
 	feature_jadwal "github.com/poseisharp/khairul-bot/internal/app/features/jadwal"
 	"github.com/poseisharp/khairul-bot/internal/app/services"
 	"github.com/poseisharp/khairul-bot/internal/domain/entities"
 	interface_features "github.com/poseisharp/khairul-bot/internal/interfaces"
-	memory_repositories "github.com/poseisharp/khairul-bot/internal/persistent/repositories/memory"
+	"github.com/poseisharp/khairul-bot/internal/persistent/repositories"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 var (
 	s        *discordgo.Session
 	GuildID  string = ""
-	commands        = map[string]interface_features.FeatureCommand{}
+	commands []interface_features.FeatureCommand
 )
-
-func addCommand(command interface_features.FeatureCommand) {
-	commands[command.DiscordCommand().Name] = command
-}
 
 func init() {
 	var err error
@@ -37,26 +35,30 @@ func init() {
 		log.Fatal("Error creating discord session")
 	}
 
-	serverRepository := memory_repositories.NewServerRepository()
+	db, err := initDb()
+	if err != nil {
+		log.Fatalf("Error initializing database: %v", err)
+	}
+
+	serverRepository := repositories.NewServerRepository(db)
+	reminderRepository := repositories.NewReminderRepository(db)
+	presetRepository := repositories.NewPresetRepository(db)
+
 	serverService := services.NewServerService(serverRepository)
-
 	prayerService := services.NewPrayerService()
+	reminderService := services.NewReminderService(reminderRepository)
+	presetService := services.NewPresetService(presetRepository)
 
-	addCommand(features.NewPingCommand())
-	addCommand(feature_jadwal.NewJadwalPresetCommand(serverService))
-	addCommand(feature_jadwal.NewJadwalCommand(prayerService, serverService))
-	addCommand(feature_jadwal.NewJadwalManualCommand(prayerService))
+	commands = []interface_features.FeatureCommand{
+		features.NewPingCommand(),
+		feature_jadwal.NewJadwalPresetCommand(serverService, presetService),
+		feature_jadwal.NewJadwalCommand(prayerService, serverService, presetService),
+		feature_jadwal.NewJadwalManualCommand(prayerService),
+
+		feature_adzan.NewAdzanCommand(serverService, reminderService),
+	}
 
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		switch i.Type {
-		case discordgo.InteractionApplicationCommand:
-			if h, ok := commands[i.ApplicationCommandData().Name]; ok {
-				if err := h.HandleCommand(s, i); err != nil {
-					log.Panicf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
-				}
-			}
-		}
-
 		for _, command := range commands {
 			if err := command.Handle(s, i); err != nil {
 				log.Panicf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
@@ -65,9 +67,8 @@ func init() {
 	})
 
 	s.AddHandler(func(s *discordgo.Session, g *discordgo.GuildCreate) {
-		serverService.CreateServer(entities.Server{
-			ID:            g.ID,
-			JadwalPresets: []entities.JadwalPreset{},
+		serverService.CreateServerIfNotExists(entities.Server{
+			ID: g.ID,
 		})
 	})
 
@@ -82,7 +83,7 @@ func main() {
 	}
 
 	log.Println("Adding commands...")
-	registeredCommands, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, GuildID, slices.MapAsync(maps.Values(commands), 0, func(v interface_features.FeatureCommand) *discordgo.ApplicationCommand {
+	registeredCommands, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, GuildID, slices.MapAsync(commands, 0, func(v interface_features.FeatureCommand) *discordgo.ApplicationCommand {
 		return v.DiscordCommand()
 	}))
 
@@ -107,13 +108,23 @@ func main() {
 	log.Println("Gracefully shutting down.")
 }
 
-// func initDb() (db *gorm.DB, err error) {
-// 	db, err = gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
-// 	if err != nil {
-// 		return
-// 	}
+func initDb() (db *gorm.DB, err error) {
+	db, err = gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		return
+	}
 
-// 	db.AutoMigrate(&entities.Server{})
+	if err := db.AutoMigrate(&entities.Server{}); err != nil {
+		return nil, err
+	}
 
-// 	return
-// }
+	if err := db.AutoMigrate(&entities.Preset{}); err != nil {
+		return nil, err
+	}
+
+	if err := db.AutoMigrate(&entities.Reminder{}); err != nil {
+		return nil, err
+	}
+
+	return
+}

@@ -2,14 +2,14 @@ package services
 
 import (
 	"github.com/poseisharp/khairul-bot/internal/domain/entities"
-	interface_repositories "github.com/poseisharp/khairul-bot/internal/interfaces/repositories"
+	"github.com/poseisharp/khairul-bot/internal/persistent/repositories"
 )
 
 type ServerService struct {
-	serverRepository interface_repositories.ServerRepository
+	serverRepository *repositories.ServerRepository
 }
 
-func NewServerService(serverRepository interface_repositories.ServerRepository) *ServerService {
+func NewServerService(serverRepository *repositories.ServerRepository) *ServerService {
 	return &ServerService{
 		serverRepository: serverRepository,
 	}
@@ -21,7 +21,7 @@ func (s *ServerService) GetServer(id string) (*entities.Server, error) {
 		return nil, err
 	}
 
-	return &server, nil
+	return server, nil
 }
 
 func (s *ServerService) GetServers() ([]entities.Server, error) {
@@ -33,8 +33,12 @@ func (s *ServerService) GetServers() ([]entities.Server, error) {
 	return servers, nil
 }
 
-func (s *ServerService) CreateServer(server entities.Server) error {
-	return s.serverRepository.Store(server)
+func (s *ServerService) CreateServerIfNotExists(server entities.Server) error {
+	if _, err := s.serverRepository.FindOne(server.ID); err != nil {
+		return s.serverRepository.Store(server)
+	}
+
+	return nil
 }
 
 func (s *ServerService) UpdateServer(server entities.Server) error {

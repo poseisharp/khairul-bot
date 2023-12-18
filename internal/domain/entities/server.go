@@ -1,7 +1,9 @@
 package entities
 
-type Server struct {
-	ID string
+import "gorm.io/gorm"
 
-	JadwalPresets []JadwalPreset
+type Server struct {
+	gorm.Model
+
+	ID string `gorm:"primaryKey"`
 }

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/hablullah/go-prayer"
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/value_objects"
 )
 
 type PrayerService struct {
@@ -14,7 +14,7 @@ func NewPrayerService() *PrayerService {
 	return &PrayerService{}
 }
 
-func (s *PrayerService) Calculate(timezone entities.TimeZone, latLong entities.LatLong) []prayer.Schedule {
+func (s *PrayerService) Calculate(timezone value_objects.TimeZone, latLong value_objects.LatLong) []prayer.Schedule {
 	schedule, _ := prayer.Calculate(prayer.Config{
 		Latitude:           latLong.Latitude(),
 		Longitude:          latLong.Longitude(),

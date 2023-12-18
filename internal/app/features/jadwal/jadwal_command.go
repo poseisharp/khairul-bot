@@ -7,7 +7,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/poseisharp/khairul-bot/internal/app/services"
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/value_objects"
 	"github.com/poseisharp/khairul-bot/internal/interfaces"
 )
 
@@ -18,9 +18,10 @@ type JadwalCommand struct {
 
 	prayerService *services.PrayerService
 	serverService *services.ServerService
+	presetService *services.PresetService
 }
 
-func NewJadwalCommand(prayerService *services.PrayerService, serverService *services.ServerService) *JadwalCommand {
+func NewJadwalCommand(prayerService *services.PrayerService, serverService *services.ServerService, presetService *services.PresetService) *JadwalCommand {
 	return &JadwalCommand{
 		discordCommand: &discordgo.ApplicationCommand{
 			Name:        "jadwal",
@@ -37,6 +38,7 @@ func NewJadwalCommand(prayerService *services.PrayerService, serverService *serv
 		},
 		prayerService: prayerService,
 		serverService: serverService,
+		presetService: presetService,
 	}
 }
 
@@ -44,15 +46,22 @@ func (p *JadwalCommand) DiscordCommand() *discordgo.ApplicationCommand {
 	return p.discordCommand
 }
 
+func (p *JadwalCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	if i.Type == discordgo.InteractionApplicationCommandAutocomplete {
+		return p.handleAutocomplete(s, i)
+	} else if i.Type == discordgo.InteractionApplicationCommand {
+		if i.ApplicationCommandData().Name == p.discordCommand.Name {
+			return p.HandleCommand(s, i)
+		}
+	}
+
+	return nil
+}
+
 func (p *JadwalCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	log.Println("Handling jadwal command...")
 
-	options := i.ApplicationCommandData().Options
-
-	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
-	for _, opt := range options {
-		optionMap[opt.Name] = opt
-	}
+	optionMap := value_objects.ArrApplicationCommandInteractionDataOption(i.ApplicationCommandData().Options).ToMap()
 
 	presetName := optionMap["preset"].StringValue()
 
@@ -60,11 +69,10 @@ func (p *JadwalCommand) HandleCommand(s *discordgo.Session, i *discordgo.Interac
 	if err != nil {
 		return err
 	}
-	var preset entities.JadwalPreset
-	for _, p := range server.JadwalPresets {
-		if p.Name == presetName {
-			preset = p
-		}
+
+	preset, err := p.presetService.GetPresetByServerIDAndName(server.ID, presetName)
+	if err != nil {
+		return err
 	}
 
 	schedule := p.prayerService.Calculate(preset.TimeZone, preset.LatLong)
@@ -120,23 +128,20 @@ func (p *JadwalCommand) HandleCommand(s *discordgo.Session, i *discordgo.Interac
 	})
 }
 
-func (p *JadwalCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	if i.Type == discordgo.InteractionApplicationCommandAutocomplete {
-		return p.handleAutocomplete(s, i)
-	}
-
-	return nil
-}
-
 func (p *JadwalCommand) handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	server, err := p.serverService.GetServer(i.GuildID)
 	if err != nil {
 		return err
 	}
 
-	presets := make([]*discordgo.ApplicationCommandOptionChoice, len(server.JadwalPresets))
-	for i, preset := range server.JadwalPresets {
-		presets[i] = &discordgo.ApplicationCommandOptionChoice{
+	presets, err := p.presetService.GetPresetsByServerID(server.ID)
+	if err != nil {
+		return err
+	}
+
+	choices := make([]*discordgo.ApplicationCommandOptionChoice, len(presets))
+	for i, preset := range presets {
+		choices[i] = &discordgo.ApplicationCommandOptionChoice{
 			Name:  preset.Name,
 			Value: preset.Name,
 		}
@@ -145,7 +150,7 @@ func (p *JadwalCommand) handleAutocomplete(s *discordgo.Session, i *discordgo.In
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 		Data: &discordgo.InteractionResponseData{
-			Choices: presets,
+			Choices: choices,
 		},
 	})
 }
