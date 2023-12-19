@@ -4,7 +4,9 @@ go 1.21.3
 
 require (
 	github.com/bwmarrin/discordgo v0.27.1 // indirect
-	github.com/google/uuid v1.4.0 // indirect
+	github.com/gocraft/work v0.5.1 // indirect
+	github.com/gomodule/redigo v1.8.9 // indirect
+	github.com/google/uuid v1.5.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hablullah/go-juliandays v1.0.1-0.20220316153050-f56193695a5b // indirect
 	github.com/hablullah/go-prayer v1.1.1 // indirect
@@ -12,9 +14,13 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
+	github.com/jonboulle/clockwork v0.4.0 // indirect
 	github.com/life4/genesis v1.10.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.18 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
+	golang.org/x/exp v0.0.0-20231206192017-f3f8817b8deb // indirect
 	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68 // indirect
 	gorm.io/driver/sqlite v1.5.4 // indirect
 	gorm.io/gorm v1.25.5 // indirect

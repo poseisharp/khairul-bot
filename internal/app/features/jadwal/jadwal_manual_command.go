@@ -49,8 +49,8 @@ func (p *JadwalManualCommand) DiscordCommand() *discordgo.ApplicationCommand {
 }
 
 func (p *JadwalManualCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	if i.Type == discordgo.InteractionApplicationCommand {
-		if i.ApplicationCommandData().Name == p.discordCommand.Name {
+	if i.ApplicationCommandData().Name == p.discordCommand.Name {
+		if i.Type == discordgo.InteractionApplicationCommand {
 			return p.HandleCommand(s, i)
 		}
 	}
@@ -61,7 +61,7 @@ func (p *JadwalManualCommand) Handle(s *discordgo.Session, i *discordgo.Interact
 func (p *JadwalManualCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	log.Println("Handling jadwal command...")
 
-	optionMap := value_objects.ArrApplicationCommandInteractionDataOption(i.ApplicationCommandData().Options).ToMap()
+	optionMap := value_objects.ConvertInteractionDataOptionToMap(i.ApplicationCommandData().Options)
 
 	latLong := value_objects.LatLong(strings.Split(optionMap["lat_long"].StringValue(), ","))
 	timezone := optionMap["timezone"].StringValue()

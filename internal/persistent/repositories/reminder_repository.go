@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/aggregates"
 	"gorm.io/gorm"
 )
 
@@ -15,12 +15,12 @@ func NewReminderRepository(db *gorm.DB) *ReminderRepository {
 	}
 }
 
-func (r *ReminderRepository) Delete(id string) error {
-	return r.db.Delete(&entities.Reminder{}, id).Error
+func (r *ReminderRepository) Delete(id int) error {
+	return r.db.Delete(&aggregates.Reminder{}, id).Error
 }
 
-func (r *ReminderRepository) FindAll() ([]entities.Reminder, error) {
-	var reminders []entities.Reminder
+func (r *ReminderRepository) FindAll() ([]aggregates.Reminder, error) {
+	var reminders []aggregates.Reminder
 
 	if err := r.db.Find(&reminders).Error; err != nil {
 		return nil, err
@@ -29,8 +29,8 @@ func (r *ReminderRepository) FindAll() ([]entities.Reminder, error) {
 	return reminders, nil
 }
 
-func (r *ReminderRepository) FindOne(id string) (*entities.Reminder, error) {
-	var reminder entities.Reminder
+func (r *ReminderRepository) FindOne(id int) (*aggregates.Reminder, error) {
+	var reminder aggregates.Reminder
 
 	if err := r.db.First(&reminder, id).Error; err != nil {
 		return nil, err
@@ -39,18 +39,18 @@ func (r *ReminderRepository) FindOne(id string) (*entities.Reminder, error) {
 	return &reminder, nil
 }
 
-func (r *ReminderRepository) Store(reminder entities.Reminder) error {
+func (r *ReminderRepository) Store(reminder aggregates.Reminder) error {
 	return r.db.Create(&reminder).Error
 }
 
-func (r *ReminderRepository) Update(reminder entities.Reminder) error {
+func (r *ReminderRepository) Update(reminder aggregates.Reminder) error {
 	return r.db.Save(&reminder).Error
 }
 
-func (r *ReminderRepository) FindByServerID(serverID string) ([]entities.Reminder, error) {
-	var reminders []entities.Reminder
+func (r *ReminderRepository) FindByServerID(serverID string) ([]aggregates.Reminder, error) {
+	var reminders []aggregates.Reminder
 
-	if err := r.db.Where("server_id = ?", serverID).Find(&reminders).Error; err != nil {
+	if err := r.db.Preload("Preset").Where("server_id = ?", serverID).Find(&reminders).Error; err != nil {
 		return nil, err
 	}
 

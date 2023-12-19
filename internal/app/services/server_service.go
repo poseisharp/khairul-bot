@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/aggregates"
 	"github.com/poseisharp/khairul-bot/internal/persistent/repositories"
 )
 
@@ -15,7 +15,7 @@ func NewServerService(serverRepository *repositories.ServerRepository) *ServerSe
 	}
 }
 
-func (s *ServerService) GetServer(id string) (*entities.Server, error) {
+func (s *ServerService) GetServer(id string) (*aggregates.Server, error) {
 	server, err := s.serverRepository.FindOne(id)
 	if err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func (s *ServerService) GetServer(id string) (*entities.Server, error) {
 	return server, nil
 }
 
-func (s *ServerService) GetServers() ([]entities.Server, error) {
+func (s *ServerService) GetServers() ([]aggregates.Server, error) {
 	servers, err := s.serverRepository.FindAll()
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func (s *ServerService) GetServers() ([]entities.Server, error) {
 	return servers, nil
 }
 
-func (s *ServerService) CreateServerIfNotExists(server entities.Server) error {
+func (s *ServerService) CreateServerIfNotExists(server aggregates.Server) error {
 	if _, err := s.serverRepository.FindOne(server.ID); err != nil {
 		return s.serverRepository.Store(server)
 	}
@@ -41,7 +41,7 @@ func (s *ServerService) CreateServerIfNotExists(server entities.Server) error {
 	return nil
 }
 
-func (s *ServerService) UpdateServer(server entities.Server) error {
+func (s *ServerService) UpdateServer(server aggregates.Server) error {
 	return s.serverRepository.Update(server)
 }
 
