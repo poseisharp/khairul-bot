@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/aggregates"
 	"gorm.io/gorm"
 )
 
@@ -16,11 +16,11 @@ func NewPresetRepository(db *gorm.DB) *PresetRepository {
 }
 
 func (r *PresetRepository) Delete(id int) error {
-	return r.db.Delete(&entities.Preset{}, id).Error
+	return r.db.Delete(&aggregates.Preset{}, id).Error
 }
 
-func (r *PresetRepository) FindAll() ([]entities.Preset, error) {
-	var presets []entities.Preset
+func (r *PresetRepository) FindAll() ([]aggregates.Preset, error) {
+	var presets []aggregates.Preset
 
 	if err := r.db.Find(&presets).Error; err != nil {
 		return nil, err
@@ -29,8 +29,8 @@ func (r *PresetRepository) FindAll() ([]entities.Preset, error) {
 	return presets, nil
 }
 
-func (r *PresetRepository) FindOne(id int) (*entities.Preset, error) {
-	var preset entities.Preset
+func (r *PresetRepository) FindOne(id int) (*aggregates.Preset, error) {
+	var preset aggregates.Preset
 
 	if err := r.db.First(&preset, id).Error; err != nil {
 		return nil, err
@@ -39,16 +39,16 @@ func (r *PresetRepository) FindOne(id int) (*entities.Preset, error) {
 	return &preset, nil
 }
 
-func (r *PresetRepository) Store(preset entities.Preset) error {
+func (r *PresetRepository) Store(preset aggregates.Preset) error {
 	return r.db.Create(&preset).Error
 }
 
-func (r *PresetRepository) Update(preset entities.Preset) error {
+func (r *PresetRepository) Update(preset aggregates.Preset) error {
 	return r.db.Save(&preset).Error
 }
 
-func (r *PresetRepository) FindByServerID(serverID string) ([]entities.Preset, error) {
-	var presets []entities.Preset
+func (r *PresetRepository) FindByServerID(serverID string) ([]aggregates.Preset, error) {
+	var presets []aggregates.Preset
 
 	if err := r.db.Where("server_id = ?", serverID).Find(&presets).Error; err != nil {
 		return nil, err
@@ -57,8 +57,8 @@ func (r *PresetRepository) FindByServerID(serverID string) ([]entities.Preset, e
 	return presets, nil
 }
 
-func (r *PresetRepository) FindByServerIDAndName(serverID string, name string) (*entities.Preset, error) {
-	var preset entities.Preset
+func (r *PresetRepository) FindByServerIDAndName(serverID string, name string) (*aggregates.Preset, error) {
+	var preset aggregates.Preset
 
 	if err := r.db.Where("server_id = ? AND name = ?", serverID, name).First(&preset).Error; err != nil {
 		return nil, err

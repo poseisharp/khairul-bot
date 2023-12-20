@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/aggregates"
 	"github.com/poseisharp/khairul-bot/internal/persistent/repositories"
 )
 
@@ -15,7 +15,7 @@ func NewPresetService(presetRepository *repositories.PresetRepository) *PresetSe
 	}
 }
 
-func (s *PresetService) GetPreset(id int) (*entities.Preset, error) {
+func (s *PresetService) GetPreset(id int) (*aggregates.Preset, error) {
 	preset, err := s.presetRepository.FindOne(id)
 	if err != nil {
 		return nil, err
@@ -24,11 +24,11 @@ func (s *PresetService) GetPreset(id int) (*entities.Preset, error) {
 	return preset, nil
 }
 
-func (s *PresetService) CreatePreset(preset entities.Preset) error {
+func (s *PresetService) CreatePreset(preset aggregates.Preset) error {
 	return s.presetRepository.Store(preset)
 }
 
-func (s *PresetService) UpdatePreset(preset entities.Preset) error {
+func (s *PresetService) UpdatePreset(preset aggregates.Preset) error {
 	return s.presetRepository.Update(preset)
 }
 
@@ -36,7 +36,7 @@ func (s *PresetService) DeletePreset(id int) error {
 	return s.presetRepository.Delete(id)
 }
 
-func (s *PresetService) GetPresetsByServerID(serverID string) ([]entities.Preset, error) {
+func (s *PresetService) GetPresetsByServerID(serverID string) ([]aggregates.Preset, error) {
 	presets, err := s.presetRepository.FindByServerID(serverID)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func (s *PresetService) GetPresetsByServerID(serverID string) ([]entities.Preset
 	return presets, nil
 }
 
-func (s *PresetService) GetPresetByServerIDAndName(serverID string, name string) (*entities.Preset, error) {
+func (s *PresetService) GetPresetByServerIDAndName(serverID string, name string) (*aggregates.Preset, error) {
 	preset, err := s.presetRepository.FindByServerIDAndName(serverID, name)
 	if err != nil {
 		return nil, err

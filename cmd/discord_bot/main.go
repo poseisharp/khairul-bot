@@ -6,13 +6,16 @@ import (
 	"os/signal"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/gocraft/work"
+	"github.com/gomodule/redigo/redis"
 	"github.com/joho/godotenv"
 	"github.com/life4/genesis/slices"
 	"github.com/poseisharp/khairul-bot/internal/app/features"
 	feature_adzan "github.com/poseisharp/khairul-bot/internal/app/features/adzan"
 	feature_jadwal "github.com/poseisharp/khairul-bot/internal/app/features/jadwal"
+	feature_reminder_worker "github.com/poseisharp/khairul-bot/internal/app/features/reminder_worker"
 	"github.com/poseisharp/khairul-bot/internal/app/services"
-	"github.com/poseisharp/khairul-bot/internal/domain/entities"
+	"github.com/poseisharp/khairul-bot/internal/domain/aggregates"
 	interface_features "github.com/poseisharp/khairul-bot/internal/interfaces"
 	"github.com/poseisharp/khairul-bot/internal/persistent/repositories"
 	"gorm.io/driver/sqlite"
@@ -23,6 +26,20 @@ var (
 	s        *discordgo.Session
 	GuildID  string = ""
 	commands []interface_features.FeatureCommand
+
+	workerPool *work.WorkerPool
+	enqueuer   *work.Enqueuer
+
+	redisPool = &redis.Pool{
+		MaxActive: 5,
+		MaxIdle:   5,
+		Wait:      true,
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", ":6379")
+		},
+	}
+
+	reminderHandler *feature_reminder_worker.ReminderWorkerHandler
 )
 
 func init() {
@@ -49,25 +66,35 @@ func init() {
 	reminderService := services.NewReminderService(reminderRepository)
 	presetService := services.NewPresetService(presetRepository)
 
+	discordService := services.NewDiscordService(s)
+
+	reminderHandler = feature_reminder_worker.NewReminderWorkerHandler(enqueuer, reminderService, prayerService, discordService)
+
+	enqueuer = work.NewEnqueuer("reminder_worker", redisPool)
+	workerPool = work.NewWorkerPool(*reminderHandler, 10, "reminder_worker", redisPool)
+
 	commands = []interface_features.FeatureCommand{
 		features.NewPingCommand(),
 		feature_jadwal.NewJadwalPresetCommand(serverService, presetService),
 		feature_jadwal.NewJadwalCommand(prayerService, serverService, presetService),
 		feature_jadwal.NewJadwalManualCommand(prayerService),
 
-		feature_adzan.NewAdzanCommand(serverService, reminderService),
+		feature_adzan.NewAdzanCommand(enqueuer, serverService, reminderService, presetService),
 	}
+
+	workerPool.Job("setup_reminder", reminderHandler.SetupReminder)
+	workerPool.JobWithOptions("run_reminder", work.JobOptions{Priority: 1, MaxFails: 1}, reminderHandler.RunReminder)
 
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		for _, command := range commands {
 			if err := command.Handle(s, i); err != nil {
-				log.Panicf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
+				log.Printf("Error handling '%v' command: %v", i.ApplicationCommandData().Name, err)
 			}
 		}
 	})
 
 	s.AddHandler(func(s *discordgo.Session, g *discordgo.GuildCreate) {
-		serverService.CreateServerIfNotExists(entities.Server{
+		serverService.CreateServerIfNotExists(aggregates.Server{
 			ID: g.ID,
 		})
 	})
@@ -78,6 +105,11 @@ func init() {
 }
 
 func main() {
+	workerPool.PeriodicallyEnqueue("0 1 * * *", "setup_reminder")
+
+	workerPool.Start()
+	defer workerPool.Stop()
+
 	if err := s.Open(); err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
 	}
@@ -114,15 +146,15 @@ func initDb() (db *gorm.DB, err error) {
 		return
 	}
 
-	if err := db.AutoMigrate(&entities.Server{}); err != nil {
+	if err := db.AutoMigrate(&aggregates.Server{}); err != nil {
 		return nil, err
 	}
 
-	if err := db.AutoMigrate(&entities.Preset{}); err != nil {
+	if err := db.AutoMigrate(&aggregates.Preset{}); err != nil {
 		return nil, err
 	}
 
-	if err := db.AutoMigrate(&entities.Reminder{}); err != nil {
+	if err := db.AutoMigrate(&aggregates.Reminder{}); err != nil {
 		return nil, err
 	}
 
