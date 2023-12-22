@@ -26,6 +26,16 @@ func (p *PingCommand) DiscordCommand() *discordgo.ApplicationCommand {
 	return p.discordCommand
 }
 
+func (p *PingCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	if i.Type == discordgo.InteractionApplicationCommand {
+		if i.ApplicationCommandData().Name == p.discordCommand.Name {
+			return p.HandleCommand(s, i)
+		}
+	}
+
+	return nil
+}
+
 func (*PingCommand) HandleCommand(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	log.Println("Handling ping command...")
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -34,8 +44,4 @@ func (*PingCommand) HandleCommand(s *discordgo.Session, i *discordgo.Interaction
 			Content: "Pong!",
 		},
 	})
-}
-
-func (*PingCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	return nil
 }
